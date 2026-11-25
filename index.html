@@ -305,9 +305,12 @@ table.dash tr:hover td{ background:var(--surface-2); }
   .score-final{ gap:12px; }
   .subscores{ gap:14px; }
 }
+/* aberto dentro do Ciclo de Competências (Etapa 5): esconde o cabeçalho */
+html.embed header.topbar{display:none}
 </style>
 </head>
 <body>
+<script>if(/[?&]embed=1/.test(location.search)) document.documentElement.classList.add("embed");</script>
 
 <div id="app">
   <header class="topbar">
