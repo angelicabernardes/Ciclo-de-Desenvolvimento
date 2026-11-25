@@ -85,6 +85,13 @@ service cloud.firestore {
       allow delete: if isRH();
     }
 
+    // ---------- Configurações gerais (ex.: lista de desligamentos) ----------
+    // todos os logados leem (as telas precisam esconder quem saiu); só o RH grava
+    match /config/{doc} {
+      allow read: if logado();
+      allow write: if isRH();
+    }
+
     // ---------- T&D: Base de Treinamentos, custos, Painel — só RH ----------
     match /tnd/{doc=**} {
       allow read, write: if isRH();

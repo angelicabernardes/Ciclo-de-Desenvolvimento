@@ -712,7 +712,7 @@ function factorByName(name){ return CATALOG.competencyFactors.find(function(f){r
 /* ============ Store (real db or local fallback) ============ */
 var Store = (function(){
   var real = null, ready = null, useReal = false;
-  var local = { evaluations: {}, pdis: {}, tnd: {}, oneonones: {} };
+  var local = { evaluations: {}, pdis: {}, tnd: {}, oneonones: {}, config: {} };
   var listeners = {}; // collection listeners for local mode
 
   function seedLocalDemo(){
@@ -843,6 +843,10 @@ var Store = (function(){
       if(useReal) return real.collection("tnd").doc(id);
       return localDoc("tnd", id);
     },
+    config:function(id){
+      if(useReal) return real.collection("config").doc(id);
+      return localDoc("config", id);
+    },
     oneonones:function(){
       if(useReal) return real.collection("oneonones");
       return localCollection("oneonones");
@@ -893,6 +897,7 @@ function viewDashboard(){
     '<div class="dash-head">'+
       '<div><h1>Avaliações de Desempenho</h1><p>Autoavaliação do colaborador e avaliação de feedback do gestor, num só lugar — o gestor já acompanha as respostas assim que o colaborador preenche.</p></div>'+
       '<div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn" onclick="Router.go(\'#/pdi\')">📋 PDI</button><button class="btn" onclick="Router.go(\'#/1a1\')">🗓️ 1:1</button>'+
+      (isRHAdmin() ? '<button class="btn" id="btn-deslig" title="Registrar desligamentos (só RH)">👋 Desligamentos</button>' : '')+
       '<button class="btn primary" onclick="Router.go(\'#/novo\')">+ Nova avaliação</button></div>'+
     '</div>'+
     (Store.isDemo() ? '<div class="banner warn">Modo de demonstração local — sem armazenamento compartilhado disponível nesta visualização. Os dados abaixo não são salvos.</div>' : '')+
@@ -903,8 +908,11 @@ function viewDashboard(){
       '<select id="f-status"><option value="">Todos os status</option>'+
         STATUS_ORDER.map(function(s){return '<option value="'+s+'">'+STATUS_LABELS[s]+'</option>';}).join('')+
       '</select>'+
+      (isRHAdmin() ? '<label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="f-deslig"> Mostrar desligados</label>' : '')+
     '</div>'+
     '<div class="table-wrap"><div id="dash-table"></div></div>';
+  var bdl = document.getElementById("btn-deslig"); if(bdl) bdl.addEventListener("click", showDesligamentosModal);
+  var fdl = document.getElementById("f-deslig"); if(fdl) fdl.addEventListener("change", drawTable);
 
   document.getElementById("f-search").addEventListener("input", drawTable);
   document.getElementById("f-status").addEventListener("change", drawTable);
@@ -959,15 +967,17 @@ function viewDashboard(){
   registerCleanup(unsub);
 
   function drawTable(){
-    var list = (window.__evals||[]).slice();
+    var mostraDeslig = !!(document.getElementById("f-deslig")||{}).checked;
+    var base = (window.__evals||[]).filter(function(e){ return mostraDeslig || !isDesligado(e.employeeEmail); });
+    var list = base.slice();
     var q = (document.getElementById("f-search").value||"").toLowerCase();
     var st = document.getElementById("f-status").value;
     if(q) list = list.filter(function(e){ return (e.employeeName||"").toLowerCase().indexOf(q)>-1 || (e.employeeGestor||"").toLowerCase().indexOf(q)>-1; });
     if(st) list = list.filter(function(e){ return e.status===st; });
     list.sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
 
-    var stats = {total:(window.__evals||[]).length, concluida:0, andamento:0};
-    (window.__evals||[]).forEach(function(e){ if(e.status==="concluida") stats.concluida++; else stats.andamento++; });
+    var stats = {total:base.length, concluida:0, andamento:0};
+    base.forEach(function(e){ if(e.status==="concluida") stats.concluida++; else stats.andamento++; });
     document.getElementById("stats").innerHTML =
       statCard(stats.total,"Avaliações no ciclo") +
       statCard(stats.andamento,"Em andamento") +
@@ -1007,7 +1017,7 @@ function viewDashboard(){
 function viewNew(){
   renderBreadcrumb({page:"new"},"Nova avaliação");
   var root = document.getElementById("view");
-  var employees = CATALOG.employees.slice().sort(function(a,b){return a.nome.localeCompare(b.nome);});
+  var employees = ativos().slice().sort(function(a,b){return a.nome.localeCompare(b.nome);});
   var positions = CATALOG.positionList;
 
   root.innerHTML =
@@ -1656,22 +1666,24 @@ function viewPdiList(){
     '</div>'+
     (Store.isDemo() ? '<div class="banner warn">Modo de demonstração local — os dados abaixo não são salvos.</div>' : '')+
     '<div class="stat-row" id="pdi-stats"></div>'+
-    '<div class="filters"><input type="search" id="pdi-search" placeholder="Buscar colaborador, gestor ou área…"></div>'+
+    '<div class="filters"><input type="search" id="pdi-search" placeholder="Buscar colaborador, gestor ou área…">'+(gc?'<label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pdi-deslig"> Mostrar desligados</label>':'')+'</div>'+
     '<div class="table-wrap"><div id="pdi-table"></div></div>'+
     pdiRulesNote();
 
   var docs = [];
   document.getElementById("pdi-search").addEventListener("input", draw);
+  var pdl = document.getElementById("pdi-deslig"); if(pdl) pdl.addEventListener("change", draw);
   var imp = document.getElementById("pdi-import-btn");
   if(imp) imp.addEventListener("click", showPdiImportModal);
   registerCleanup(listenPdis(function(list){ docs = list; draw(); }));
 
   function draw(){
-    var byEmail = {};
-    docs.forEach(function(d){ byEmail[pdiId(d.employeeEmail||d.id)] = d; });
+    var byEmail = {}, mostraDeslig = !!(document.getElementById("pdi-deslig")||{}).checked;
+    docs.forEach(function(d){ var k = pdiId(d.employeeEmail||d.id); if(mostraDeslig || !isDesligado(k)) byEmail[k] = d; });
     var people = [];
     if(gc){
       CATALOG.employees.forEach(function(emp){
+        if(!mostraDeslig && isDesligado(emp.email)) return;
         var d = byEmail[pdiId(emp.email)];
         people.push({email:pdiId(emp.email), nome:emp.nome, cargo:emp.funcao, gestor:emp.gestor, area:emp.area, items:(d&&d.items)||[], has:!!d});
         delete byEmail[pdiId(emp.email)];
@@ -2572,6 +2584,63 @@ function showTrainModal(ctx){
 
 /* ============ Render dispatcher ============ */
 /* ============================================================================
+   Desligamentos — quem saiu da empresa deixa de aparecer nas listas (Avaliação,
+   PDI, 1:1, nova avaliação e Ciclo). O histórico é mantido no banco.
+   Documento config/desligamentos: leitura para todos os logados, gravação só RH.
+   ============================================================================ */
+var DESLIG = {}; // e-mail -> {nome, data, por, em}
+function isDesligado(email){ return !!DESLIG[(email||"").toLowerCase()]; }
+function loadDesligamentos(){
+  return Store.config("desligamentos").get().then(function(s){
+    DESLIG = {}; ((s.exists && s.data().lista) || []).forEach(function(x){ if(x && x.email) DESLIG[x.email.toLowerCase()] = x; });
+  }).catch(function(err){ console.error(err); });
+}
+function ativos(){ return CATALOG.employees.filter(function(e){ return !isDesligado(e.email); }); }
+function showDesligamentosModal(){
+  var host = document.getElementById("modal-host");
+  function lista(){ return Object.keys(DESLIG).map(function(k){ return DESLIG[k]; }).sort(function(a,b){ return (b.data||"").localeCompare(a.data||""); }); }
+  function draw(){
+    var emps = ativos().slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+    host.innerHTML =
+      '<div class="modal-overlay" id="modal-overlay"><div class="modal-card" style="max-width:640px;">'+
+        '<div class="modal-head"><h3>Desligamentos</h3><button class="icon-btn" id="modal-close" aria-label="Fechar">✕</button></div>'+
+        '<p class="hint">Quem for registrado aqui deixa de aparecer nas listas de Avaliação, PDI, 1:1 e no Ciclo, e não pode mais ser escolhido em nova avaliação ou 1:1. <b>O histórico não é apagado</b>: avaliações, PDIs, 1:1 e custos de T&amp;D continuam guardados (o RH pode vê-los marcando "Mostrar desligados").</p>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0 16px">'+
+          '<div class="field" style="margin:0;flex:1;min-width:240px"><label for="dl-emp">Colaborador</label><select id="dl-emp"><option value="">Selecione…</option>'+emps.map(function(e){ return '<option value="'+esc((e.email||"").toLowerCase())+'">'+esc(e.nome)+' — '+esc(e.funcao||"")+'</option>'; }).join("")+'</select></div>'+
+          '<div class="field" style="margin:0"><label for="dl-data">Data do desligamento</label><input type="date" id="dl-data" value="'+todayISO()+'"></div>'+
+          '<button class="btn primary" id="dl-add">Registrar desligamento</button></div>'+
+        '<table class="dash"><thead><tr><th>Colaborador</th><th>Desligado em</th><th>Registrado por</th><th></th></tr></thead><tbody>'+
+          (lista().length ? lista().map(function(x){ return '<tr><td>'+esc(x.nome||x.email)+'</td><td>'+esc(fmtDateISOtoBR(x.data||""))+'</td><td class="hint">'+esc(x.por||"")+'</td><td><button class="btn small" data-dl-rm="'+esc(x.email)+'" title="Volta a aparecer nas listas">Reativar</button></td></tr>'; }).join("")
+            : '<tr><td colspan="4" class="hint">Nenhum desligamento registrado.</td></tr>')+
+        '</tbody></table>'+
+      '</div></div>';
+    document.getElementById("modal-close").addEventListener("click", fechar);
+    document.getElementById("modal-overlay").addEventListener("click", function(ev){ if(ev.target.id==="modal-overlay") fechar(); });
+    document.getElementById("dl-add").addEventListener("click", function(){
+      var em = document.getElementById("dl-emp").value, dt = document.getElementById("dl-data").value;
+      if(!em){ toast("Selecione o colaborador."); return; }
+      if(!dt){ toast("Informe a data do desligamento."); return; }
+      var e = CATALOG.employees.find(function(x){ return (x.email||"").toLowerCase()===em; }) || {};
+      var novo = Object.assign({}, DESLIG); novo[em] = {email:em, nome:e.nome||em, data:dt, por:currentUserEmail(), em:Date.now()};
+      salvar(novo, "Desligamento registrado.");
+    });
+    host.querySelectorAll("[data-dl-rm]").forEach(function(b){ b.addEventListener("click", function(){
+      var em = b.getAttribute("data-dl-rm"), x = DESLIG[em];
+      if(!window.confirm("Reativar "+((x&&x.nome)||em)+"? A pessoa volta a aparecer nas listas.")) return;
+      var novo = Object.assign({}, DESLIG); delete novo[em]; salvar(novo, "Colaborador reativado.");
+    }); });
+  }
+  function salvar(novo, msg){
+    var l = Object.keys(novo).map(function(k){ return novo[k]; });
+    Store.config("desligamentos").set({lista:l, updatedAt:Date.now(), por:currentUserEmail()}).then(function(){ DESLIG = novo; toast(msg); draw(); })
+      .catch(function(err){ console.error(err); toast("Não foi possível gravar."); });
+  }
+  var mudou = false;
+  function fechar(){ closeNotifyModal(); render(); }
+  draw();
+}
+
+/* ============================================================================
    1:1 (One-on-One) — padrão 1 por trimestre (quarter); o gestor pode criar adicionais.
    Acesso igual ao da Avaliação e do PDI: RH vê todos; gestor (1º e 2º) vê a equipe;
    colaborador vê os próprios. Coleção "oneonones" (regras em firestore.rules).
@@ -2592,8 +2661,8 @@ function ooQuarterEnd(ano,q){ return ano+"-"+("0"+(q*3)).slice(-2)+"-"+(q===1||q
 function ooLabel(o){ return o.tipo==="adicional" ? "Adicional" : ("Q"+o.quarter+"/"+o.ano); }
 function ooTeam(){
   var me = currentUserEmail();
-  if(isRHAdmin()) return CATALOG.employees.slice();
-  return CATALOG.employees.filter(function(e){
+  if(isRHAdmin()) return ativos().slice();
+  return ativos().filter(function(e){
     return (e.gestorEmail||"").toLowerCase()===me || (e.gestorEmail2||"").toLowerCase()===me || (e.email||"").toLowerCase()===me;
   });
 }
@@ -2643,6 +2712,7 @@ function viewOneOnOneList(){
     team.forEach(function(e){ byEmail[(e.email||"").toLowerCase()] = {email:(e.email||"").toLowerCase(), nome:e.nome, cargo:e.funcao, gestor:e.gestor, area:e.area, itens:[]}; });
     docs.forEach(function(d){
       var k = (d.employeeEmail||"").toLowerCase();
+      if(isDesligado(k)) return;
       if(!byEmail[k]) byEmail[k] = {email:k, nome:d.employeeName||k, cargo:d.cargo, gestor:d.gestor, area:d.area, itens:[]};
       byEmail[k].itens.push(d);
     });
@@ -2873,7 +2943,7 @@ function bootApp(user){
   var app = document.getElementById("app");
   if(!document.getElementById("view")) app.innerHTML = APP_SHELL_HTML;
   updateUserBadge(user);
-  Store.ready.then(render);
+  Store.ready.then(loadDesligamentos).then(render);
   updateRHButton();
 }
 function loginErrorMessage(e){

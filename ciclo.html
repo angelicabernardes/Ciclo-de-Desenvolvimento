@@ -858,7 +858,7 @@ const primeiro=n=>(n||'').split(' ')[0];
 function cargoNome(p){ const q=QUADRO[p.dc]; return (q&&q.nome)||p.funcao; }
 function allPessoas(){
   const extra=Object.values(STATE.pessoas||{});
-  return [...PESSOAS_BASE.map(p=>({...p,...((STATE.pessoasEdit||{})[p.id]||{})})),...extra].filter(p=>!(STATE.desligados||[]).includes(p.id));
+  return [...PESSOAS_BASE.map(p=>({...p,...((STATE.pessoasEdit||{})[p.id]||{})})),...extra].filter(p=>!(STATE.desligados||[]).includes(p.id) && !(window.CICLO_DESLIG||[]).includes(normTxt(p.nome)));
 }
 function getP(id){ return allPessoas().find(p=>p.id===id); }
 function onbOf(id){ STATE.onboarding=STATE.onboarding||{}; return STATE.onboarding[id]||(STATE.onboarding[id]={}); }
@@ -1749,7 +1749,11 @@ function telaConfiguracao(temBase, temEstado){
 
 function carregar(ignorarBackup){
   gate('<h1>Ciclo de Competências</h1><p>Carregando os dados…</p>');
-  col.get().then(function(qs){
+  // desligamentos registrados na Avaliação (config/desligamentos): quem saiu some das listas do ciclo
+  db.collection("config").doc("desligamentos").get().then(function(d){
+    var n = function(x){ return String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim(); };
+    window.CICLO_DESLIG = ((d.exists && d.data().lista) || []).map(function(x){ return n(x.nome); });
+  }).catch(function(){ window.CICLO_DESLIG = []; }).then(function(){ return col.get(); }).then(function(qs){
     var docs = {}; qs.forEach(function(d){ docs[d.id] = d.data(); });
     var temBase = !!docs.base_dcs, temEstado = Object.keys(docs).some(function(k){ return k.indexOf("s_")===0; });
     if(!temBase || (!temEstado && !ignorarBackup)) return telaConfiguracao(temBase, temEstado);
