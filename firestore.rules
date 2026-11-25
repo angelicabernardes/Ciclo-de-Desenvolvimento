@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// Regras de acesso do banco (Firestore) — Avaliação de Desempenho UGM + Ciclo de Competências
+// Quem vale de verdade é o que está publicado no Firebase (Firestore Database → Rules).
+// Este arquivo é a versão oficial: ao mudar aqui, copie e cole lá e clique em Publish.
+//
+// Resumo:
+//  • RH (Angélica e Gabryella): lê e grava tudo.
+//  • Gestor (1º ou 2º) e colaborador: só a avaliação e o PDI em que o próprio e-mail aparece.
+//  • T&D (Base de Treinamentos, Painel) e Ciclo de Competências: só RH.
+//  • Qualquer outra coleção: bloqueada.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function me() {
+      return request.auth != null && request.auth.token.email is string
+        ? request.auth.token.email.lower() : '';
+    }
+    function logado() {
+      return me().matches('.*@umgrauemeio[.]com$');
+    }
+    function isRH() {
+      return logado() && me() in [
+        'angelica.bernardes@umgrauemeio.com',
+        'gabryella.franca@umgrauemeio.com'
+      ];
+    }
+    // a pessoa é o colaborador, o gestor ou o 2º gestor do documento
+    function envolvido(d) {
+      return logado() && (
+        d.get('employeeEmail', '') == me() ||
+        d.get('managerEmail', '') == me() ||
+        d.get('managerEmail2', '') == me()
+      );
+    }
+    // é gestor (1º ou 2º) no documento
+    function gestorDe(d) {
+      return logado() && (
+        d.get('managerEmail', '') == me() ||
+        d.get('managerEmail2', '') == me()
+      );
+    }
+    // quem não é RH não pode trocar de quem é o documento
+    function mantemDonos() {
+      return request.resource.data.get('employeeEmail', '') == resource.data.get('employeeEmail', '')
+        && request.resource.data.get('managerEmail', '') == resource.data.get('managerEmail', '')
+        && request.resource.data.get('managerEmail2', '') == resource.data.get('managerEmail2', '');
+    }
+
+    // ---------- Avaliações de desempenho ----------
+    match /evaluations/{id} {
+      allow get: if isRH() || envolvido(resource.data);
+      allow list: if isRH()
+        || (logado() && (resource.data.employeeEmail == me()
+                      || resource.data.managerEmail == me()
+                      || resource.data.managerEmail2 == me()));
+      allow create: if isRH() || gestorDe(request.resource.data);
+      allow update: if isRH() || (envolvido(resource.data) && mantemDonos());
+      allow delete: if isRH();
+    }
+
+    // ---------- PDIs (um documento por colaborador) ----------
+    match /pdis/{id} {
+      // resource == null: o PDI ainda não existe (a tela confere antes de criar)
+      allow get: if isRH() || (logado() && resource == null) || envolvido(resource.data);
+      allow list: if isRH()
+        || (logado() && (resource.data.employeeEmail == me()
+                      || resource.data.managerEmail == me()
+                      || resource.data.managerEmail2 == me()));
+      allow create: if isRH() || gestorDe(request.resource.data);
+      allow update: if isRH() || (envolvido(resource.data) && mantemDonos());
+      allow delete: if isRH();
+    }
+
+    // ---------- T&D: Base de Treinamentos, custos, Painel — só RH ----------
+    match /tnd/{doc=**} {
+      allow read, write: if isRH();
+    }
+
+    // ---------- Ciclo de Competências (DC, Onboarding, Diagnóstico, SWOT) — só RH ----------
+    match /ciclo/{doc=**} {
+      allow read, write: if isRH();
+    }
+
+    // qualquer outra coisa: bloqueado (nada fica aberto por padrão)
+  }
+}
