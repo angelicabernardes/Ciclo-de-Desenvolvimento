@@ -314,6 +314,14 @@ table.dash tr:hover td{ background:var(--surface-2); }
 .oo-top textarea{ width:100%; min-height:78px; resize:vertical; }
 .oo-acao{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid var(--border); }
 .oo-acao:last-child{ border-bottom:none; }
+.oo-info{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; align-items:end; }
+.oo-info label{ display:block; font-size:11.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; font-weight:700; margin-bottom:4px; }
+@media (max-width:760px){ .oo-info{ grid-template-columns:1fr 1fr; } }
+.oo-h2{ font-size:17px; margin:22px 0 0; }
+.oo-chk{ color:var(--text-faint); border-color:var(--border-strong); }
+.oo-chk.on{ background:#2F6FD6; border-color:#2F6FD6; color:#fff; }
+.oo-foot{ position:sticky; bottom:0; display:flex; gap:10px; justify-content:flex-end; align-items:center; background:var(--bg); padding:14px 0; margin-top:14px; border-top:1px solid var(--border); }
+.oo-foot .hint{ margin-right:auto; }
 /* aberto dentro do Ciclo de Competências (Etapa 5): esconde o cabeçalho */
 html.embed header.topbar{display:none}
 </style>
@@ -2615,7 +2623,7 @@ function viewOneOnOneList(){
   var hoje = todayISO(), qAtual = ooQuarterOf(hoje), anoAtual = Number(hoje.slice(0,4));
   root.innerHTML =
     '<div class="dash-head">'+
-      '<div><h1>1:1 — One-on-One</h1><p>Conversas individuais entre gestor e colaborador. O padrão é <b>um 1:1 por trimestre</b>; o gestor pode registrar 1:1 adicionais sempre que precisar. O colaborador pode deixar a preparação escrita antes da conversa.</p></div>'+
+      '<div><h1>1:1 — One-on-One</h1><p>Conversas individuais entre gestor e colaborador. O padrão é <b>um 1:1 por trimestre</b>; o gestor pode fazer 1:1 adicionais sempre que precisar. Clique em <b>▶ Iniciar 1:1</b> para abrir o formulário com as perguntas, conduzir a conversa, registrar as respostas e gravar como realizado.</p></div>'+
       '<div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn" onclick="Router.go(\'#/\')">← Avaliações</button><button class="btn" onclick="Router.go(\'#/pdi\')">📋 PDI</button></div>'+
     '</div>'+
     (Store.isDemo() ? '<div class="banner warn">Modo de demonstração local — os dados abaixo não são salvos.</div>' : '')+
@@ -2623,7 +2631,7 @@ function viewOneOnOneList(){
     '<div class="filters" style="display:flex;gap:10px;flex-wrap:wrap;"><input type="search" id="oo-search" placeholder="Buscar colaborador, gestor ou área…" style="flex:1;min-width:220px;">'+
       '<select id="oo-ano">'+[anoAtual-1,anoAtual,anoAtual+1].map(function(y){ return '<option '+(y===ano?'selected':'')+'>'+y+'</option>'; }).join("")+'</select></div>'+
     '<div class="table-wrap"><div id="oo-table"></div></div>'+
-    '<p class="hint" style="margin-top:14px;">✔ realizado · 📅 agendado · <b style="color:var(--s1)">pendente</b> = trimestre em andamento sem 1:1 · <b style="color:var(--s1)">não realizado</b> = trimestre encerrado sem 1:1. A cobrança trimestral começa em '+fmtDateISOtoBR(OO_INICIO)+'.</p>';
+    '<p class="hint" style="margin-top:14px;">✔ realizado (clique para rever) · ✎ em andamento · <b style="color:var(--s1)">pendente</b> = trimestre em andamento sem 1:1 · <b style="color:var(--s1)">não realizado</b> = trimestre encerrado sem 1:1. A cobrança trimestral começa em '+fmtDateISOtoBR(OO_INICIO)+'.</p>';
   var docs = [];
   document.getElementById("oo-search").addEventListener("input", draw);
   document.getElementById("oo-ano").addEventListener("change", function(e){ ano = Number(e.target.value); sessionStorage.setItem("oo-ano", ano); draw(); });
@@ -2672,7 +2680,7 @@ function viewOneOnOneList(){
     if(!people.length){ el.innerHTML = '<div class="empty"><div class="big">Nenhum colaborador encontrado</div></div>'; return; }
     function cel(c, p, n){
       if(c.k==="ok") return '<a href="#/1a1/'+c.o.id+'" class="pill pdi-dentro" style="text-decoration:none">✔ '+esc(fmtDateISOtoBR(c.o.data))+'</a>';
-      if(c.k==="ag") return '<a href="#/1a1/'+c.o.id+'" class="pill pdi-andamento" style="text-decoration:none">📅 '+esc(fmtDateISOtoBR(c.o.data))+'</a>';
+      if(c.k==="ag") return '<a href="#/1a1/'+c.o.id+'" class="pill pdi-andamento" style="text-decoration:none">✎ em andamento</a>';
       var lbl = c.k==="nr" ? '<span class="pill pdi-atrasado">não realizado</span>' : c.k==="pend" ? '<span class="pill pdi-atrasado">pendente</span>' : '<span class="hint">—</span>';
       return lbl;
     }
@@ -2684,46 +2692,33 @@ function viewOneOnOneList(){
           p.q.map(function(c,i){ return '<td>'+cel(c,p,i+1)+'</td>'; }).join("")+
           '<td class="num">'+(p.adic.length ? p.adic.map(function(o){ return '<a href="#/1a1/'+o.id+'">'+esc(fmtDateISOtoBR(o.data))+'</a>'; }).join(", ") : '<span class="hint">—</span>')+'</td>'+
           '<td>'+(p.ultimo ? esc(fmtDateISOtoBR(p.ultimo)) : '<span class="hint">—</span>')+'</td>'+
-          '<td><div class="row-actions">'+(pode && emp ? '<button class="btn small primary" data-oo-new="'+esc(p.email)+'">+ 1:1</button>' : '')+'</div></td></tr>';
+          '<td><div class="row-actions">'+(function(){
+            if(!(pode && emp)) return '';
+            var qa = ooQuarterOf(hoje), cur = p.itens.filter(function(o){ return o.tipo!=="adicional" && Number(o.ano)===anoAtual && Number(o.quarter)===qa; });
+            var aberto = p.itens.filter(function(o){ return o.status!=="realizado"; }).sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); })[0];
+            if(aberto) return '<a class="btn small primary" href="#/1a1/'+aberto.id+'" style="text-decoration:none">✎ Continuar 1:1</a>';
+            if(!cur.length) return '<button class="btn small primary" data-oo-new="'+esc(p.email)+'">▶ Iniciar 1:1</button>';
+            return '<button class="btn small" data-oo-new="'+esc(p.email)+'" title="O 1:1 trimestral de Q'+qa+' já foi realizado">+ 1:1 adicional</button>';
+          })()+'</div></td></tr>';
       }).join("")+'</tbody></table>';
-    el.querySelectorAll("[data-oo-new]").forEach(function(b){ b.addEventListener("click", function(){ showOneOnOneNewModal(b.getAttribute("data-oo-new"), docs); }); });
+    el.querySelectorAll("[data-oo-new]").forEach(function(b){ b.addEventListener("click", function(){ b.disabled=true; startOneOnOne(b.getAttribute("data-oo-new"), docs); }); });
   }
 }
 
-function showOneOnOneNewModal(email, docs){
+function startOneOnOne(email, docs){
   var emp = ooEmpByEmail(email); if(!emp) return;
   var hoje = todayISO(), ano = Number(hoje.slice(0,4)), qa = ooQuarterOf(hoje);
-  var ja = (docs||[]).filter(function(o){ return (o.employeeEmail||"")===email && o.tipo!=="adicional" && Number(o.ano)===ano && Number(o.quarter)===qa; }).length;
-  var host = document.getElementById("modal-host");
-  host.innerHTML =
-    '<div class="modal-overlay" id="modal-overlay"><div class="modal-card" style="max-width:460px;">'+
-      '<div class="modal-head"><h3>Novo 1:1 — '+esc(emp.nome)+'</h3><button class="icon-btn" id="modal-close" aria-label="Fechar">✕</button></div>'+
-      '<div class="field"><label for="oo-tipo">Tipo</label><select id="oo-tipo"><option value="trimestral" '+(ja?'':'selected')+'>Trimestral (padrão)</option><option value="adicional" '+(ja?'selected':'')+'>Adicional</option></select></div>'+
-      '<div class="field"><label for="oo-data">Data da conversa</label><input type="date" id="oo-data" value="'+hoje+'"></div>'+
-      '<div class="field" id="oo-qwrap"><label for="oo-q">Trimestre</label><select id="oo-q">'+[1,2,3,4].map(function(n){ return '<option value="'+n+'" '+(n===qa?'selected':'')+'>Q'+n+'</option>'; }).join("")+'</select></div>'+
-      (ja ? '<p class="hint">Já existe um 1:1 trimestral de Q'+qa+'/'+ano+' para este colaborador — por isso sugerimos "Adicional".</p>' : '')+
-      '<div style="display:flex;gap:10px;margin-top:6px;"><button class="btn" id="oo-cancel">Cancelar</button><button class="btn primary" id="oo-ok">Criar 1:1</button></div>'+
-    '</div></div>';
-  function sync(){ document.getElementById("oo-qwrap").style.display = document.getElementById("oo-tipo").value==="adicional" ? "none" : ""; }
-  sync(); document.getElementById("oo-tipo").addEventListener("change", sync);
-  document.getElementById("oo-data").addEventListener("change", function(e){ document.getElementById("oo-q").value = String(ooQuarterOf(e.target.value)); });
-  document.getElementById("modal-close").addEventListener("click", closeNotifyModal);
-  document.getElementById("oo-cancel").addEventListener("click", closeNotifyModal);
-  document.getElementById("modal-overlay").addEventListener("click", function(ev){ if(ev.target.id==="modal-overlay") closeNotifyModal(); });
-  document.getElementById("oo-ok").addEventListener("click", function(){
-    var data = document.getElementById("oo-data").value || hoje, tipo = document.getElementById("oo-tipo").value;
-    var topicos = {}; OO_TOPICOS.forEach(function(t){ topicos[t.k] = ""; });
-    var doc = {
-      employeeEmail:(emp.email||"").toLowerCase(), managerEmail:(emp.gestorEmail||findGestorEmail(emp.gestor)||"").toLowerCase(), managerEmail2:(emp.gestorEmail2||"").toLowerCase(),
-      employeeName:emp.nome, cargo:emp.funcao||"", area:emp.area||"", gestor:emp.gestor||"",
-      tipo:tipo, ano:Number(data.slice(0,4)), quarter: tipo==="adicional" ? ooQuarterOf(data) : Number(document.getElementById("oo-q").value),
-      data:data, status:"agendado", topicos:topicos, acoes:[], proximo:"",
-      createdAt:Date.now(), createdBy:currentUserEmail()
-    };
-    this.disabled = true;
-    Store.oneonones().add(doc).then(function(ref){ closeNotifyModal(); Router.go("#/1a1/"+ref.id); toast("1:1 criado."); })
-      .catch(function(err){ console.error(err); toast("Não foi possível criar o 1:1."); });
-  });
+  var ja = (docs||[]).some(function(o){ return (o.employeeEmail||"")===(emp.email||"").toLowerCase() && o.tipo!=="adicional" && Number(o.ano)===ano && Number(o.quarter)===qa; });
+  var topicos = {}; OO_TOPICOS.forEach(function(t){ topicos[t.k] = ""; });
+  var doc = {
+    employeeEmail:(emp.email||"").toLowerCase(), managerEmail:(emp.gestorEmail||findGestorEmail(emp.gestor)||"").toLowerCase(), managerEmail2:(emp.gestorEmail2||"").toLowerCase(),
+    employeeName:emp.nome, cargo:emp.funcao||"", area:emp.area||"", gestor:emp.gestor||"",
+    tipo: ja ? "adicional" : "trimestral", ano:ano, quarter:qa,
+    data:hoje, status:"em_andamento", topicos:topicos, acoes:[], proximo:"",
+    createdAt:Date.now(), createdBy:currentUserEmail()
+  };
+  Store.oneonones().add(doc).then(function(ref){ Router.go("#/1a1/"+ref.id); })
+    .catch(function(err){ console.error(err); toast("Não foi possível iniciar o 1:1."); });
 }
 
 /* ---------- um 1:1 ---------- */
@@ -2744,41 +2739,60 @@ function viewOneOnOneDetail(id){
   function draw(o){
     var gestor = ooCanManage(o), mine = currentUserEmail();
     var souColab = (o.employeeEmail||"")===mine;
-    var editavel = gestor || (souColab && o.status!=="realizado");
+    var feito = o.status==="realizado";
+    var editavel = (gestor && !feito) || (souColab && !gestor && !feito);
     var acoes = o.acoes || [];
+    var dis = editavel ? '' : 'disabled';
     root.innerHTML =
       '<div class="dash-head"><div><h1>1:1 · '+esc(o.employeeName||"")+'</h1>'+
-        '<p>'+esc(o.cargo||"")+' · gestor '+esc(o.gestor||"—")+' · <b>'+esc(ooLabel(o))+'</b> · '+esc(fmtDateISOtoBR(o.data))+' · '+
-        (o.status==="realizado" ? '<span class="pill pdi-dentro">✔ realizado</span>' : '<span class="pill pdi-andamento">📅 agendado</span>')+'</p></div>'+
+        '<p>'+esc(o.cargo||"")+' · gestor '+esc(o.gestor||"—")+' · <b>'+esc(ooLabel(o))+'</b> · '+
+        (feito ? '<span class="pill pdi-dentro">✔ realizado em '+esc(fmtDateISOtoBR(o.data))+'</span>' : '<span class="pill pdi-andamento">✎ em andamento</span>')+'</p></div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print"><button class="btn" onclick="Router.go(\'#/1a1\')">← Todos os 1:1</button>'+
-        (isRHAdmin() ? '<button class="btn small" onclick="window.print()">🖶 Imprimir / PDF</button>' : '')+
-        (gestor && o.status!=="realizado" ? '<button class="btn primary" id="oo-concluir">✔ Concluir 1:1</button>' : '')+
-        (gestor && o.status==="realizado" ? '<button class="btn" id="oo-reabrir">Reabrir</button>' : '')+
+        (isRHAdmin() || gestor ? '<button class="btn small" onclick="window.print()">🖶 Imprimir / PDF</button>' : '')+
+        (gestor && feito ? '<button class="btn" id="oo-reabrir">✎ Editar registro</button>' : '')+
         (isRHAdmin() ? '<button class="btn small danger" id="oo-del">🗑️ Excluir</button>' : '')+'</div></div>'+
-      (souColab && o.status!=="realizado" && !gestor ? '<div class="banner">Você pode escrever a sua preparação antes da conversa. O gestor complementa durante o 1:1.</div>' : '')+
-      '<div class="card"><div class="card-body" style="display:flex;gap:18px;flex-wrap:wrap;">'+
-        '<div class="field" style="margin:0"><label>Data</label><input type="date" id="oo-f-data" value="'+esc(o.data||"")+'" '+(gestor?'':'disabled')+'></div>'+
-        '<div class="field" style="margin:0"><label>Próximo 1:1</label><input type="date" id="oo-f-prox" value="'+esc(o.proximo||"")+'" '+(gestor?'':'disabled')+'></div>'+
+      (souColab && !gestor && !feito ? '<div class="banner">Você pode escrever a sua preparação antes da conversa. O gestor complementa e registra durante o 1:1.</div>' : '')+
+      (gestor && !feito ? '<div class="banner">Conduza a conversa seguindo as perguntas abaixo e registre as respostas. Tudo é gravado automaticamente; ao final, clique em <b>✔ Gravar e registrar como realizado</b>.</div>' : '')+
+      '<div class="card"><div class="card-body oo-info">'+
+        '<div><label>Colaborador</label><b>'+esc(o.employeeName||"")+'</b></div>'+
+        '<div><label>Gestor</label><b>'+esc(o.gestor||"—")+'</b></div>'+
+        '<div class="field" style="margin:0"><label for="oo-f-tipo">Tipo</label><select id="oo-f-tipo" '+(gestor&&!feito?'':'disabled')+'><option value="trimestral" '+(o.tipo!=="adicional"?'selected':'')+'>Trimestral (Q'+esc(o.quarter)+'/'+esc(o.ano)+')</option><option value="adicional" '+(o.tipo==="adicional"?'selected':'')+'>Adicional</option></select></div>'+
+        '<div class="field" style="margin:0"><label for="oo-f-data">Data de realização</label><input type="date" id="oo-f-data" value="'+esc(o.data||"")+'" '+(gestor&&!feito?'':'disabled')+'></div>'+
       '</div></div>'+
-      '<div class="oo-grid">'+OO_TOPICOS.map(function(t){
-        return '<div class="oo-top"><div class="oo-th"><span class="oo-chk">✓</span><div><b>'+esc(t.t)+'</b><div class="hint">'+esc(t.d)+'</div></div></div>'+
-          '<textarea data-oo-top="'+t.k+'" rows="3" placeholder="'+(editavel?'Anotações…':'')+'" '+(editavel?'':'disabled')+'>'+esc((o.topicos||{})[t.k]||"")+'</textarea></div>';
+      '<h2 class="oo-h2">Perguntas do 1:1</h2>'+
+      '<div class="oo-grid">'+OO_TOPICOS.map(function(t,i){
+        return '<div class="oo-top"><div class="oo-th"><span class="oo-chk'+(((o.topicos||{})[t.k]||"").trim()?' on':'')+'">✓</span><div><b>'+(i+1)+'. '+esc(t.t)+'</b><div class="hint">'+esc(t.d)+'</div></div></div>'+
+          '<textarea data-oo-top="'+t.k+'" rows="4" placeholder="'+(editavel?'Registre aqui a resposta / o que foi conversado…':'')+'" '+dis+'>'+esc((o.topicos||{})[t.k]||"")+'</textarea></div>';
       }).join("")+'</div>'+
       '<div class="card" style="margin-top:18px"><div class="card-head"><div><h2>Ações combinadas</h2><div class="sub">O que cada um se compromete a fazer até o próximo 1:1.</div></div>'+
         (editavel ? '<button class="btn small no-print" id="oo-add">+ ação</button>' : '')+'</div><div class="card-body">'+
         (acoes.length ? acoes.map(function(a,i){
-          return '<div class="oo-acao"><input type="checkbox" data-oo-feito="'+i+'" '+(a.feito?'checked':'')+' '+(editavel?'':'disabled')+'>'+
-            '<input type="text" data-oo-a="'+i+'" data-k="texto" value="'+esc(a.texto||"")+'" placeholder="Ação" '+(editavel?'':'disabled')+' style="flex:1;min-width:200px">'+
-            '<select data-oo-a="'+i+'" data-k="resp" '+(editavel?'':'disabled')+'><option value="colaborador" '+(a.resp!=="gestor"?'selected':'')+'>Colaborador</option><option value="gestor" '+(a.resp==="gestor"?'selected':'')+'>Gestor</option></select>'+
-            '<input type="date" data-oo-a="'+i+'" data-k="prazo" value="'+esc(a.prazo||"")+'" '+(editavel?'':'disabled')+'>'+
+          return '<div class="oo-acao"><input type="checkbox" data-oo-feito="'+i+'" '+(a.feito?'checked':'')+' '+(gestor||souColab?'':'disabled')+' title="Concluída">'+
+            '<input type="text" data-oo-a="'+i+'" data-k="texto" value="'+esc(a.texto||"")+'" placeholder="Ação" '+dis+' style="flex:1;min-width:200px">'+
+            '<select data-oo-a="'+i+'" data-k="resp" '+dis+'><option value="colaborador" '+(a.resp!=="gestor"?'selected':'')+'>Colaborador</option><option value="gestor" '+(a.resp==="gestor"?'selected':'')+'>Gestor</option></select>'+
+            '<input type="date" data-oo-a="'+i+'" data-k="prazo" value="'+esc(a.prazo||"")+'" '+dis+'>'+
             (editavel ? '<button class="icon-btn no-print" data-oo-rm="'+i+'" title="Remover">✕</button>' : '')+'</div>';
         }).join("") : '<p class="hint" style="margin:0">Nenhuma ação registrada.</p>')+
+        '<div class="field" style="margin:14px 0 0;max-width:220px"><label for="oo-f-prox">Próximo 1:1 (sugestão)</label><input type="date" id="oo-f-prox" value="'+esc(o.proximo||"")+'" '+(gestor&&!feito?'':'disabled')+'></div>'+
       '</div></div>'+
-      (o.status==="realizado" ? '<p class="hint" style="margin-top:12px">Concluído em '+esc(fmtDateISOtoBR(o.concludedAt||""))+(o.concludedBy?' por '+esc(o.concludedBy):'')+'.</p>' : '');
+      (gestor && !feito ? '<div class="oo-foot no-print"><span class="hint" id="oo-saved">Gravado automaticamente.</span><button class="btn" id="oo-gravar">💾 Gravar</button><button class="btn primary" id="oo-concluir">✔ Gravar e registrar como realizado</button></div>' : '')+
+      (feito ? '<p class="hint" style="margin-top:12px">Registrado como realizado em '+esc(fmtDateISOtoBR(o.concludedAt||o.data||""))+(o.concludedBy?' por '+esc(o.concludedBy):'')+'.</p>' : '');
 
-    function upd(patch){ return ref.update(Object.assign({updatedAt:Date.now(), updatedBy:mine}, patch)).catch(function(err){ console.error(err); toast("Não foi possível salvar."); }); }
-    root.querySelectorAll("[data-oo-top]").forEach(function(t){ t.addEventListener("change", function(){ var p={}; p["topicos."+t.getAttribute("data-oo-top")] = t.value; upd(p); }); });
-    var fd = document.getElementById("oo-f-data"); if(fd) fd.addEventListener("change", function(){ var v=fd.value; if(!v) return; var p={data:v}; if(o.tipo==="adicional"){ p.ano=Number(v.slice(0,4)); p.quarter=ooQuarterOf(v); } upd(p); });
+    function upd(patch){ var sv=document.getElementById("oo-saved"); if(sv) sv.textContent="Gravando…";
+      return ref.update(Object.assign({updatedAt:Date.now(), updatedBy:mine}, patch)).then(function(){ if(sv) sv.textContent="Gravado às "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"."; })
+        .catch(function(err){ console.error(err); toast("Não foi possível gravar."); }); }
+    function coletar(){
+      var p = {}; root.querySelectorAll("[data-oo-top]").forEach(function(t){ p["topicos."+t.getAttribute("data-oo-top")] = t.value; });
+      p.acoes = salvarAcoes();
+      var fd=document.getElementById("oo-f-data"); if(fd && !fd.disabled && fd.value){ p.data=fd.value; p.ano=Number(fd.value.slice(0,4)); p.quarter=ooQuarterOf(fd.value); }
+      var ft=document.getElementById("oo-f-tipo"); if(ft && !ft.disabled) p.tipo=ft.value;
+      var fp=document.getElementById("oo-f-prox"); if(fp && !fp.disabled) p.proximo=fp.value;
+      return p;
+    }
+    root.querySelectorAll("[data-oo-top]").forEach(function(t){ t.addEventListener("change", function(){ var p={}; p["topicos."+t.getAttribute("data-oo-top")] = t.value; upd(p);
+      var chk=t.parentNode.querySelector(".oo-chk"); if(chk) chk.classList.toggle("on", !!t.value.trim()); }); });
+    var fd = document.getElementById("oo-f-data"); if(fd) fd.addEventListener("change", function(){ var v=fd.value; if(!v) return; upd({data:v, ano:Number(v.slice(0,4)), quarter:ooQuarterOf(v)}); });
+    var ft = document.getElementById("oo-f-tipo"); if(ft) ft.addEventListener("change", function(){ upd({tipo:ft.value}); });
     var fp = document.getElementById("oo-f-prox"); if(fp) fp.addEventListener("change", function(){ upd({proximo:fp.value}); });
     function salvarAcoes(){ var l = acoes.map(function(a){ return Object.assign({}, a); });
       root.querySelectorAll("[data-oo-a]").forEach(function(el){ var i=Number(el.getAttribute("data-oo-a")); l[i][el.getAttribute("data-k")] = el.value; });
@@ -2787,8 +2801,12 @@ function viewOneOnOneDetail(id){
     root.querySelectorAll("[data-oo-a],[data-oo-feito]").forEach(function(el){ el.addEventListener("change", function(){ upd({acoes:salvarAcoes()}); }); });
     root.querySelectorAll("[data-oo-rm]").forEach(function(b){ b.addEventListener("click", function(){ var l=salvarAcoes(); l.splice(Number(b.getAttribute("data-oo-rm")),1); upd({acoes:l}).then(function(){ draw(Object.assign({}, o, {acoes:l})); }); }); });
     var add = document.getElementById("oo-add"); if(add) add.addEventListener("click", function(){ var l=salvarAcoes(); l.push({texto:"",resp:"colaborador",prazo:"",feito:false}); upd({acoes:l}).then(function(){ draw(Object.assign({}, o, {acoes:l})); }); });
-    var con = document.getElementById("oo-concluir"); if(con) con.addEventListener("click", function(){ showOneOnOneConcludeModal(o, ref); });
-    var rea = document.getElementById("oo-reabrir"); if(rea) rea.addEventListener("click", function(){ upd({status:"agendado"}); });
+    var gr = document.getElementById("oo-gravar"); if(gr) gr.addEventListener("click", function(){ upd(coletar()).then(function(){ toast("1:1 gravado."); }); });
+    var con = document.getElementById("oo-concluir"); if(con) con.addEventListener("click", function(){
+      var vazios = OO_TOPICOS.filter(function(t){ var el=root.querySelector('[data-oo-top="'+t.k+'"]'); return !el || !el.value.trim(); }).length;
+      upd(coletar()).then(function(){ showOneOnOneConcludeModal(Object.assign({}, o, {data:(document.getElementById("oo-f-data")||{}).value||o.data}), ref, vazios); });
+    });
+    var rea = document.getElementById("oo-reabrir"); if(rea) rea.addEventListener("click", function(){ upd({status:"em_andamento"}); });
     var del = document.getElementById("oo-del"); if(del) del.addEventListener("click", function(){
       if(!window.confirm("Excluir este 1:1 de "+(o.employeeName||"")+"? As anotações serão apagadas e não poderão ser recuperadas.")) return;
       ref.delete().then(function(){ Router.go("#/1a1"); toast("1:1 excluído."); }).catch(function(){ toast("Não foi possível excluir."); });
@@ -2796,14 +2814,15 @@ function viewOneOnOneDetail(id){
   }
 }
 
-function showOneOnOneConcludeModal(o, ref){
+function showOneOnOneConcludeModal(o, ref, vazios){
   var host = document.getElementById("modal-host");
   host.innerHTML =
     '<div class="modal-overlay" id="modal-overlay"><div class="modal-card" style="max-width:460px;">'+
-      '<div class="modal-head"><h3>Concluir 1:1</h3><button class="icon-btn" id="modal-close" aria-label="Fechar">✕</button></div>'+
-      '<p class="hint">O 1:1 de <b>'+esc(o.employeeName||"")+'</b> em '+esc(fmtDateISOtoBR(o.data))+' fica registrado como realizado.</p>'+
+      '<div class="modal-head"><h3>Registrar 1:1 como realizado</h3><button class="icon-btn" id="modal-close" aria-label="Fechar">✕</button></div>'+
+      '<p class="hint">O 1:1 de <b>'+esc(o.employeeName||"")+'</b> fica registrado como <b>realizado em '+esc(fmtDateISOtoBR(o.data))+'</b> ('+esc(o.tipo==="adicional"?"adicional":"Q"+ooQuarterOf(o.data)+"/"+String(o.data).slice(0,4))+'). Depois você pode abrir para rever a qualquer momento.</p>'+
+      (vazios ? '<div class="banner warn" style="margin:8px 0">'+vazios+' pergunta(s) ficaram sem resposta.</div>' : '')+
       '<label style="display:flex;gap:8px;align-items:flex-start;margin:10px 0"><input type="checkbox" id="oo-pdi" checked> <span>Atualizar o campo <b>"Último 1:1"</b> das ações em aberto do PDI de '+esc((o.employeeName||"").split(" ")[0])+' com esta data.</span></label>'+
-      '<div style="display:flex;gap:10px;margin-top:6px;"><button class="btn" id="oo-c-cancel">Cancelar</button><button class="btn primary" id="oo-c-ok">✔ Concluir</button></div>'+
+      '<div style="display:flex;gap:10px;margin-top:6px;"><button class="btn" id="oo-c-cancel">Cancelar</button><button class="btn primary" id="oo-c-ok">✔ Registrar como realizado</button></div>'+
     '</div></div>';
   document.getElementById("modal-close").addEventListener("click", closeNotifyModal);
   document.getElementById("oo-c-cancel").addEventListener("click", closeNotifyModal);
@@ -2819,7 +2838,7 @@ function showOneOnOneConcludeModal(o, ref){
         items.forEach(function(it){ var k = pdiItemStatus(it).key; if(k==="nao_iniciado"||k==="andamento"||k==="atrasado"){ if(!it.ultimo1x1 || it.ultimo1x1 < o.data){ it.ultimo1x1 = o.data; n++; } } });
         return n ? pref.update({items:items, updatedAt:Date.now()}) : null;
       });
-    }).then(function(){ closeNotifyModal(); toast("1:1 concluído."); })
+    }).then(function(){ closeNotifyModal(); toast("1:1 registrado como realizado."); })
       .catch(function(err){ console.error(err); closeNotifyModal(); toast("1:1 concluído, mas não foi possível atualizar o PDI."); });
   });
 }
