@@ -449,7 +449,7 @@ const STAGES=[
   {k:'swot',n:4,t:'Análise SWOT',s:'Forças • Fraquezas • Sugestão de trilha',status:'ok'},
   {k:'trilha',n:5,t:'Trilha de Desenvolvimento',s:'Base de Treinamentos • Painel T&D • Trilhas',status:'ok'},
   {k:'pdi',n:6,t:'PDI',s:'Formalização das ações acordadas',status:'ok'},
-  {k:'one-on-one',n:7,t:'One-on-One',s:'Acompanhamento trimestral • Suporte'},
+  {k:'one-on-one',n:7,t:'One-on-One',s:'Acompanhamento trimestral • Suporte',status:'ok'},
   {k:'desempenho',n:8,t:'Avaliação de Desempenho',s:'Anual • Metas • Pontos de melhoria',status:'ok'},
   {k:'indicadores',n:9,t:'Indicadores Individuais',s:'Evolução do PDI • Aplicação • Metas'}
 ];
@@ -482,6 +482,7 @@ function route(){
   else if(key==='swot') renderSwot();
   else if(key==='trilha') renderTrilha();
   else if(key==='pdi') renderEmbed('pdi');
+  else if(key==='one-on-one') renderEmbed('oneonone');
   else if(key==='desempenho') renderEmbed('desempenho');
   else renderStage(STAGES.find(s=>s.k===key));
   if(prevHash!==h) window.scrollTo(0,0);
@@ -1280,6 +1281,8 @@ function swPlanoAuto(sw,i){ const cs=sw.cursos.filter(c=>(c.prioridade||1)===i+1
 const EMBEDS={
   pdi:{n:6,t:'PDI — Plano de Desenvolvimento Individual',crumb:'Etapa 6 de 9 · Formalização das ações acordadas',src:'./?embed=1#/pdi',
     p:'Os PDIs de todos os colaboradores — os mesmos que os gestores acompanham na ferramenta de Avaliação. Aqui o RH vê todos; cada gestor vê só a sua equipe.'},
+  oneonone:{n:7,t:'1:1 — One-on-One',crumb:'Etapa 7 de 9 · Acompanhamento trimestral • Suporte',src:'./?embed=1#/1a1',
+    p:'Conversas individuais gestor–colaborador: um 1:1 por trimestre (padrão) e adicionais quando o gestor quiser. O gestor acessa os 1:1 da equipe pela ferramenta de Avaliação; o RH vê todos.'},
   desempenho:{n:8,t:'Avaliação de Desempenho',crumb:'Etapa 8 de 9 · Anual • Metas • Pontos de melhoria',src:'./?embed=1#/',
     p:'As avaliações de desempenho do ciclo — as mesmas que gestores e colaboradores respondem. Os pontos de melhoria alimentam o PDI (Etapa 6).'}
 };

@@ -6,7 +6,7 @@ rules_version = '2';
 //
 // Resumo:
 //  • RH (Angélica e Gabryella): lê e grava tudo.
-//  • Gestor (1º ou 2º) e colaborador: só a avaliação e o PDI em que o próprio e-mail aparece.
+//  • Gestor (1º ou 2º) e colaborador: só a avaliação, o PDI e os 1:1 em que o próprio e-mail aparece.
 //  • T&D (Base de Treinamentos, Painel) e Ciclo de Competências: só RH.
 //  • Qualquer outra coleção: bloqueada.
 
@@ -64,6 +64,18 @@ service cloud.firestore {
     match /pdis/{id} {
       // resource == null: o PDI ainda não existe (a tela confere antes de criar)
       allow get: if isRH() || (logado() && resource == null) || envolvido(resource.data);
+      allow list: if isRH()
+        || (logado() && (resource.data.employeeEmail == me()
+                      || resource.data.managerEmail == me()
+                      || resource.data.managerEmail2 == me()));
+      allow create: if isRH() || gestorDe(request.resource.data);
+      allow update: if isRH() || (envolvido(resource.data) && mantemDonos());
+      allow delete: if isRH();
+    }
+
+    // ---------- 1:1 (One-on-One) — mesmo acesso da Avaliação e do PDI ----------
+    match /oneonones/{id} {
+      allow get: if isRH() || envolvido(resource.data);
       allow list: if isRH()
         || (logado() && (resource.data.employeeEmail == me()
                       || resource.data.managerEmail == me()

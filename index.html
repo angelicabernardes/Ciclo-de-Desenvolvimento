@@ -305,6 +305,15 @@ table.dash tr:hover td{ background:var(--surface-2); }
   .score-final{ gap:12px; }
   .subscores{ gap:14px; }
 }
+/* ---------- 1:1 ---------- */
+.oo-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; }
+@media (max-width:760px){ .oo-grid{ grid-template-columns:1fr; } }
+.oo-top{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow); }
+.oo-th{ display:flex; gap:10px; align-items:flex-start; margin-bottom:8px; }
+.oo-chk{ width:22px; height:22px; border-radius:50%; border:2px solid var(--accent); color:var(--accent); display:grid; place-items:center; font-size:12px; font-weight:800; flex:none; }
+.oo-top textarea{ width:100%; min-height:78px; resize:vertical; }
+.oo-acao{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid var(--border); }
+.oo-acao:last-child{ border-bottom:none; }
 /* aberto dentro do Ciclo de Competências (Etapa 5): esconde o cabeçalho */
 html.embed header.topbar{display:none}
 </style>
@@ -695,7 +704,7 @@ function factorByName(name){ return CATALOG.competencyFactors.find(function(f){r
 /* ============ Store (real db or local fallback) ============ */
 var Store = (function(){
   var real = null, ready = null, useReal = false;
-  var local = { evaluations: {}, pdis: {}, tnd: {} };
+  var local = { evaluations: {}, pdis: {}, tnd: {}, oneonones: {} };
   var listeners = {}; // collection listeners for local mode
 
   function seedLocalDemo(){
@@ -775,7 +784,7 @@ var Store = (function(){
       id:id,
       get:function(){ var d=local[name][id]; return Promise.resolve({exists:!!d, data:function(){return snapData(name,id);}}); },
       set:function(data){ local[name][id]=data; fireLocal(name); fireLocalDoc(name,id); return Promise.resolve(); },
-      update:function(data){ var d=local[name][id]||{}; deepMerge(d, data); local[name][id]=d; fireLocal(name); fireLocalDoc(name,id); return Promise.resolve(); },
+      update:function(data){ var d=local[name][id]||{}; var nd={}; Object.keys(data).forEach(function(k){ if(k.indexOf('.')>-1){ var p=k.split('.'), o=nd; p.slice(0,-1).forEach(function(x){ o[x]=o[x]||{}; o=o[x]; }); o[p[p.length-1]]=data[k]; } else nd[k]=data[k]; }); data=nd; deepMerge(d, data); local[name][id]=d; fireLocal(name); fireLocalDoc(name,id); return Promise.resolve(); },
       delete:function(){ delete local[name][id]; fireLocal(name); fireLocalDoc(name,id); return Promise.resolve(); },
       onSnapshot:function(cb){
         var key=name+"/"+id; listeners[key]=listeners[key]||[]; listeners[key].push(cb);
@@ -826,6 +835,14 @@ var Store = (function(){
       if(useReal) return real.collection("tnd").doc(id);
       return localDoc("tnd", id);
     },
+    oneonones:function(){
+      if(useReal) return real.collection("oneonones");
+      return localCollection("oneonones");
+    },
+    oneonone:function(id){
+      if(useReal) return real.collection("oneonones").doc(id);
+      return localDoc("oneonones", id);
+    },
     tndCol:function(){
       if(useReal) return real.collection("tnd");
       return localCollection("tnd");
@@ -843,6 +860,7 @@ var Router = {
     if(parts[0]==="novo") return {page:"new"};
     if(parts[0]==="avaliacao" && parts[1]) return {page:"detail", id:parts[1], focus:parts[2]};
     if(parts[0]==="pdi"){ if(parts[1]){ var em=parts[1]; try{ em=decodeURIComponent(em); }catch(ex){} return {page:"pdi-detail", email:em}; } return {page:"pdi"}; }
+    if(parts[0]==="1a1") return parts[1] ? {page:"1a1-detail", id:parts[1]} : {page:"1a1"};
     if(parts[0]==="tnd") return {page: parts[1]==="base" ? "tnd-base" : "tnd"};
     return {page:"dashboard"};
   }
@@ -866,7 +884,7 @@ function viewDashboard(){
   root.innerHTML =
     '<div class="dash-head">'+
       '<div><h1>Avaliações de Desempenho</h1><p>Autoavaliação do colaborador e avaliação de feedback do gestor, num só lugar — o gestor já acompanha as respostas assim que o colaborador preenche.</p></div>'+
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn" onclick="Router.go(\'#/pdi\')">📋 PDI</button>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn" onclick="Router.go(\'#/pdi\')">📋 PDI</button><button class="btn" onclick="Router.go(\'#/1a1\')">🗓️ 1:1</button>'+
       '<button class="btn primary" onclick="Router.go(\'#/novo\')">+ Nova avaliação</button></div>'+
     '</div>'+
     (Store.isDemo() ? '<div class="banner warn">Modo de demonstração local — sem armazenamento compartilhado disponível nesta visualização. Os dados abaixo não são salvos.</div>' : '')+
@@ -1624,7 +1642,7 @@ function viewPdiList(){
             : 'Suas ações de desenvolvimento e as da sua equipe, com o índice de evolução desde '+fmtDateISOtoBR(PDI_SCORE_FROM)+'.')+
       '</p></div>'+
       '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-        '<button class="btn" onclick="Router.go(\'#/\')">← Avaliações</button>'+
+        '<button class="btn" onclick="Router.go(\'#/\')">← Avaliações</button><button class="btn" onclick="Router.go(\'#/1a1\')">🗓️ 1:1</button>'+
         (gc ? '<button class="btn" onclick="Router.go(\'#/tnd\')">📊 Painel T&amp;D</button><button class="btn" id="pdi-import-btn">⬆️ Importar histórico (JSON)</button>' : '')+
       '</div>'+
     '</div>'+
@@ -1685,7 +1703,7 @@ function viewPdiList(){
     el.innerHTML = '<table class="dash"><thead><tr><th>Colaborador</th><th>Gestor</th><th>Área</th><th>Ações</th><th>Índice (desde 2026)</th><th></th></tr></thead><tbody>'+
       people.map(function(p){
         var open = p.items.filter(function(it){ var k=pdiItemStatus(it).key; return k==="nao_iniciado"||k==="andamento"||k==="atrasado"||k==="nao_realizado"; }).length;
-        return '<tr><td class="person"><div class="name">'+esc(p.nome)+'</div><div class="role">'+esc(p.cargo||"")+'</div></td>'+
+        return '<tr><td class="person"><div class="name">'+esc(p.nome)+(p.eu?' <span class="hint">(você)</span>':'')+'</div><div class="role">'+esc(p.cargo||"")+'</div></td>'+
           '<td>'+esc(p.gestor||"—")+'</td><td>'+esc(p.area||"—")+'</td>'+
           '<td class="num">'+(p.has ? p.items.length+' <span class="hint">('+open+' em aberto)</span>' : '<span class="hint">sem PDI</span>')+'</td>'+
           '<td class="num">'+(p.r.index!=null ? fmtPct(p.r.index)+' <span class="hint">('+p.r.n+' ações)</span>' : '—')+'</td>'+
@@ -2545,6 +2563,267 @@ function showTrainModal(ctx){
 
 
 /* ============ Render dispatcher ============ */
+/* ============================================================================
+   1:1 (One-on-One) — padrão 1 por trimestre (quarter); o gestor pode criar adicionais.
+   Acesso igual ao da Avaliação e do PDI: RH vê todos; gestor (1º e 2º) vê a equipe;
+   colaborador vê os próprios. Coleção "oneonones" (regras em firestore.rules).
+   ============================================================================ */
+var OO_TOPICOS = [
+  {k:"sentindo",    t:"Como está se sentindo?",      d:"Bem-estar, energia, motivação no momento."},
+  {k:"emMente",     t:"O que você tem em mente?",    d:"Assuntos que o colaborador quer trazer para a conversa."},
+  {k:"correramBem", t:"Coisas que correram bem",     d:"Conquistas e entregas do período."},
+  {k:"aprendizados",t:"Aprendizados",                d:"O que aprendeu, o que faria diferente."},
+  {k:"prioridades", t:"Prioridades",                 d:"Foco para o próximo período."},
+  {k:"desafios",    t:"Desafios e preocupações",     d:"Bloqueios, riscos, pontos de atenção."},
+  {k:"equipe",      t:"Dinâmica da equipe",          d:"Relação com pares, colaboração, clima."},
+  {k:"carreira",    t:"Desenvolvimento de carreira", d:"Interesses, PDI, próximos passos de crescimento."}
+];
+var OO_INICIO = "2026-10-01"; // a partir de quando o 1:1 trimestral passa a ser cobrado (Q4/2026)
+function ooQuarterOf(iso){ var m = Number((iso||todayISO()).slice(5,7)); return Math.ceil(m/3); }
+function ooQuarterEnd(ano,q){ return ano+"-"+("0"+(q*3)).slice(-2)+"-"+(q===1||q===4?"31":"30"); }
+function ooLabel(o){ return o.tipo==="adicional" ? "Adicional" : ("Q"+o.quarter+"/"+o.ano); }
+function ooTeam(){
+  var me = currentUserEmail();
+  if(isRHAdmin()) return CATALOG.employees.slice();
+  return CATALOG.employees.filter(function(e){
+    return (e.gestorEmail||"").toLowerCase()===me || (e.gestorEmail2||"").toLowerCase()===me || (e.email||"").toLowerCase()===me;
+  });
+}
+function ooCanManage(o){ // gestor (1º/2º) ou RH
+  var me = currentUserEmail();
+  return isRHAdmin() || (o.managerEmail||"")===me || (o.managerEmail2||"")===me;
+}
+function listenOneOnOnes(cb){
+  var mine = currentUserEmail();
+  function pack(snap){ return snap.docs.map(function(d){ var v=Object.assign({}, d.data()||{}); v.id=d.id; return v; }); }
+  function fail(err){ console.error(err); toast("Não foi possível carregar os 1:1."); }
+  if(isRHAdmin()) return Store.oneonones().onSnapshot(function(snap){ cb(pack(snap)); }, fail);
+  var a = {}, b = {}, c = {};
+  function emit(){ var m = {}; [a,b,c].forEach(function(x){ Object.keys(x).forEach(function(k){ m[k]=x[k]; }); }); cb(Object.keys(m).map(function(k){ return m[k]; })); }
+  var u1 = Store.oneonones().where("employeeEmail","==",mine).onSnapshot(function(s){ a={}; pack(s).forEach(function(x){ a[x.id]=x; }); emit(); }, fail);
+  var u2 = Store.oneonones().where("managerEmail","==",mine).onSnapshot(function(s){ b={}; pack(s).forEach(function(x){ b[x.id]=x; }); emit(); }, fail);
+  var u3 = Store.oneonones().where("managerEmail2","==",mine).onSnapshot(function(s){ c={}; pack(s).forEach(function(x){ c[x.id]=x; }); emit(); }, fail);
+  return function(){ u1(); u2(); u3(); };
+}
+function ooEmpByEmail(email){ var m=(email||"").toLowerCase(); return CATALOG.employees.find(function(e){ return (e.email||"").toLowerCase()===m; }) || null; }
+
+/* ---------- lista / painel ---------- */
+function viewOneOnOneList(){
+  renderBreadcrumb({page:"1a1"}, "1:1");
+  var root = document.getElementById("view");
+  var ano = Number(sessionStorage.getItem("oo-ano")) || new Date().getFullYear();
+  var hoje = todayISO(), qAtual = ooQuarterOf(hoje), anoAtual = Number(hoje.slice(0,4));
+  root.innerHTML =
+    '<div class="dash-head">'+
+      '<div><h1>1:1 — One-on-One</h1><p>Conversas individuais entre gestor e colaborador. O padrão é <b>um 1:1 por trimestre</b>; o gestor pode registrar 1:1 adicionais sempre que precisar. O colaborador pode deixar a preparação escrita antes da conversa.</p></div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn" onclick="Router.go(\'#/\')">← Avaliações</button><button class="btn" onclick="Router.go(\'#/pdi\')">📋 PDI</button></div>'+
+    '</div>'+
+    (Store.isDemo() ? '<div class="banner warn">Modo de demonstração local — os dados abaixo não são salvos.</div>' : '')+
+    '<div class="stat-row" id="oo-stats"></div>'+
+    '<div class="filters" style="display:flex;gap:10px;flex-wrap:wrap;"><input type="search" id="oo-search" placeholder="Buscar colaborador, gestor ou área…" style="flex:1;min-width:220px;">'+
+      '<select id="oo-ano">'+[anoAtual-1,anoAtual,anoAtual+1].map(function(y){ return '<option '+(y===ano?'selected':'')+'>'+y+'</option>'; }).join("")+'</select></div>'+
+    '<div class="table-wrap"><div id="oo-table"></div></div>'+
+    '<p class="hint" style="margin-top:14px;">✔ realizado · 📅 agendado · <b style="color:var(--s1)">pendente</b> = trimestre em andamento sem 1:1 · <b style="color:var(--s1)">não realizado</b> = trimestre encerrado sem 1:1. A cobrança trimestral começa em '+fmtDateISOtoBR(OO_INICIO)+'.</p>';
+  var docs = [];
+  document.getElementById("oo-search").addEventListener("input", draw);
+  document.getElementById("oo-ano").addEventListener("change", function(e){ ano = Number(e.target.value); sessionStorage.setItem("oo-ano", ano); draw(); });
+  registerCleanup(listenOneOnOnes(function(l){ docs = l; draw(); }));
+
+  function draw(){
+    var team = ooTeam(), mine = currentUserEmail();
+    var byEmail = {};
+    team.forEach(function(e){ byEmail[(e.email||"").toLowerCase()] = {email:(e.email||"").toLowerCase(), nome:e.nome, cargo:e.funcao, gestor:e.gestor, area:e.area, itens:[]}; });
+    docs.forEach(function(d){
+      var k = (d.employeeEmail||"").toLowerCase();
+      if(!byEmail[k]) byEmail[k] = {email:k, nome:d.employeeName||k, cargo:d.cargo, gestor:d.gestor, area:d.area, itens:[]};
+      byEmail[k].itens.push(d);
+    });
+    var people = Object.keys(byEmail).map(function(k){ return byEmail[k]; });
+    // colaborador sem equipe: só ele mesmo
+    if(!isRHAdmin()) people = people.filter(function(p){ return p.email===mine || p.itens.length || team.some(function(e){ return (e.email||"").toLowerCase()===p.email && ((e.gestorEmail||"").toLowerCase()===mine || (e.gestorEmail2||"").toLowerCase()===mine); }); });
+    var q = (document.getElementById("oo-search").value||"").toLowerCase();
+    if(q) people = people.filter(function(p){ return [p.nome,p.gestor,p.area].join(" ").toLowerCase().indexOf(q)>-1; });
+    people.sort(function(a,b){ return (a.nome||"").localeCompare(b.nome||""); });
+    var feitos=0, devidos=0, pend=0, adic=0;
+    people.forEach(function(p){
+      var euMesmo = !isRHAdmin() && p.email===mine && people.length>1; p.eu = euMesmo;
+      var _f=feitos,_d=devidos,_p=pend,_a=adic;
+      p.q = [1,2,3,4].map(function(n){
+        var l = p.itens.filter(function(o){ return o.tipo!=="adicional" && Number(o.ano)===ano && Number(o.quarter)===n; });
+        var r = l.find(function(o){ return o.status==="realizado"; }), ag = l.find(function(o){ return o.status!=="realizado"; });
+        var conta = ooQuarterEnd(ano,n) >= OO_INICIO;
+        var passado = conta && (ano<anoAtual || (ano===anoAtual && n<qAtual)), atual = conta && ano===anoAtual && n===qAtual;
+        if(passado||atual) devidos++;
+        if(r){ if(passado||atual) feitos++; return {k:"ok", o:r}; }
+        if(ag) return {k:"ag", o:ag};
+        if(passado) return {k:"nr"}; if(atual){ pend++; return {k:"pend"}; } return {k:"fut"};
+      });
+      p.adic = p.itens.filter(function(o){ return o.tipo==="adicional" && String(o.data||"").slice(0,4)===String(ano); });
+      adic += p.adic.length;
+      p.ultimo = p.itens.filter(function(o){ return o.status==="realizado"; }).map(function(o){ return o.data; }).sort().pop() || "";
+      if(euMesmo){ feitos=_f; devidos=_d; pend=_p; adic=_a; } // os 1:1 do próprio gestor não entram nos números da equipe
+    });
+    document.getElementById("oo-stats").innerHTML =
+      pdiStatCard(people.length, isRHAdmin() ? "Colaboradores" : "Pessoas") +
+      pdiStatCard(devidos ? Math.round(feitos/devidos*100)+"%" : "—", "Trimestrais realizados ("+ano+")") +
+      pdiStatCard(pend, "Pendentes no trimestre atual") +
+      pdiStatCard(adic, "1:1 adicionais ("+ano+")");
+    var el = document.getElementById("oo-table");
+    if(!people.length){ el.innerHTML = '<div class="empty"><div class="big">Nenhum colaborador encontrado</div></div>'; return; }
+    function cel(c, p, n){
+      if(c.k==="ok") return '<a href="#/1a1/'+c.o.id+'" class="pill pdi-dentro" style="text-decoration:none">✔ '+esc(fmtDateISOtoBR(c.o.data))+'</a>';
+      if(c.k==="ag") return '<a href="#/1a1/'+c.o.id+'" class="pill pdi-andamento" style="text-decoration:none">📅 '+esc(fmtDateISOtoBR(c.o.data))+'</a>';
+      var lbl = c.k==="nr" ? '<span class="pill pdi-atrasado">não realizado</span>' : c.k==="pend" ? '<span class="pill pdi-atrasado">pendente</span>' : '<span class="hint">—</span>';
+      return lbl;
+    }
+    el.innerHTML = '<table class="dash"><thead><tr><th>Colaborador</th><th>Gestor</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Adicionais</th><th>Último 1:1</th><th></th></tr></thead><tbody>'+
+      people.map(function(p){
+        var emp = ooEmpByEmail(p.email);
+        var pode = isRHAdmin() || (emp && ((emp.gestorEmail||"").toLowerCase()===mine || (emp.gestorEmail2||"").toLowerCase()===mine));
+        return '<tr><td class="person"><div class="name">'+esc(p.nome)+(p.eu?' <span class="hint">(você)</span>':'')+'</div><div class="role">'+esc(p.cargo||"")+'</div></td><td>'+esc(p.gestor||"—")+'</td>'+
+          p.q.map(function(c,i){ return '<td>'+cel(c,p,i+1)+'</td>'; }).join("")+
+          '<td class="num">'+(p.adic.length ? p.adic.map(function(o){ return '<a href="#/1a1/'+o.id+'">'+esc(fmtDateISOtoBR(o.data))+'</a>'; }).join(", ") : '<span class="hint">—</span>')+'</td>'+
+          '<td>'+(p.ultimo ? esc(fmtDateISOtoBR(p.ultimo)) : '<span class="hint">—</span>')+'</td>'+
+          '<td><div class="row-actions">'+(pode && emp ? '<button class="btn small primary" data-oo-new="'+esc(p.email)+'">+ 1:1</button>' : '')+'</div></td></tr>';
+      }).join("")+'</tbody></table>';
+    el.querySelectorAll("[data-oo-new]").forEach(function(b){ b.addEventListener("click", function(){ showOneOnOneNewModal(b.getAttribute("data-oo-new"), docs); }); });
+  }
+}
+
+function showOneOnOneNewModal(email, docs){
+  var emp = ooEmpByEmail(email); if(!emp) return;
+  var hoje = todayISO(), ano = Number(hoje.slice(0,4)), qa = ooQuarterOf(hoje);
+  var ja = (docs||[]).filter(function(o){ return (o.employeeEmail||"")===email && o.tipo!=="adicional" && Number(o.ano)===ano && Number(o.quarter)===qa; }).length;
+  var host = document.getElementById("modal-host");
+  host.innerHTML =
+    '<div class="modal-overlay" id="modal-overlay"><div class="modal-card" style="max-width:460px;">'+
+      '<div class="modal-head"><h3>Novo 1:1 — '+esc(emp.nome)+'</h3><button class="icon-btn" id="modal-close" aria-label="Fechar">✕</button></div>'+
+      '<div class="field"><label for="oo-tipo">Tipo</label><select id="oo-tipo"><option value="trimestral" '+(ja?'':'selected')+'>Trimestral (padrão)</option><option value="adicional" '+(ja?'selected':'')+'>Adicional</option></select></div>'+
+      '<div class="field"><label for="oo-data">Data da conversa</label><input type="date" id="oo-data" value="'+hoje+'"></div>'+
+      '<div class="field" id="oo-qwrap"><label for="oo-q">Trimestre</label><select id="oo-q">'+[1,2,3,4].map(function(n){ return '<option value="'+n+'" '+(n===qa?'selected':'')+'>Q'+n+'</option>'; }).join("")+'</select></div>'+
+      (ja ? '<p class="hint">Já existe um 1:1 trimestral de Q'+qa+'/'+ano+' para este colaborador — por isso sugerimos "Adicional".</p>' : '')+
+      '<div style="display:flex;gap:10px;margin-top:6px;"><button class="btn" id="oo-cancel">Cancelar</button><button class="btn primary" id="oo-ok">Criar 1:1</button></div>'+
+    '</div></div>';
+  function sync(){ document.getElementById("oo-qwrap").style.display = document.getElementById("oo-tipo").value==="adicional" ? "none" : ""; }
+  sync(); document.getElementById("oo-tipo").addEventListener("change", sync);
+  document.getElementById("oo-data").addEventListener("change", function(e){ document.getElementById("oo-q").value = String(ooQuarterOf(e.target.value)); });
+  document.getElementById("modal-close").addEventListener("click", closeNotifyModal);
+  document.getElementById("oo-cancel").addEventListener("click", closeNotifyModal);
+  document.getElementById("modal-overlay").addEventListener("click", function(ev){ if(ev.target.id==="modal-overlay") closeNotifyModal(); });
+  document.getElementById("oo-ok").addEventListener("click", function(){
+    var data = document.getElementById("oo-data").value || hoje, tipo = document.getElementById("oo-tipo").value;
+    var topicos = {}; OO_TOPICOS.forEach(function(t){ topicos[t.k] = ""; });
+    var doc = {
+      employeeEmail:(emp.email||"").toLowerCase(), managerEmail:(emp.gestorEmail||findGestorEmail(emp.gestor)||"").toLowerCase(), managerEmail2:(emp.gestorEmail2||"").toLowerCase(),
+      employeeName:emp.nome, cargo:emp.funcao||"", area:emp.area||"", gestor:emp.gestor||"",
+      tipo:tipo, ano:Number(data.slice(0,4)), quarter: tipo==="adicional" ? ooQuarterOf(data) : Number(document.getElementById("oo-q").value),
+      data:data, status:"agendado", topicos:topicos, acoes:[], proximo:"",
+      createdAt:Date.now(), createdBy:currentUserEmail()
+    };
+    this.disabled = true;
+    Store.oneonones().add(doc).then(function(ref){ closeNotifyModal(); Router.go("#/1a1/"+ref.id); toast("1:1 criado."); })
+      .catch(function(err){ console.error(err); toast("Não foi possível criar o 1:1."); });
+  });
+}
+
+/* ---------- um 1:1 ---------- */
+function viewOneOnOneDetail(id){
+  renderBreadcrumb({page:"1a1-detail"}, "1:1");
+  var root = document.getElementById("view");
+  root.innerHTML = '<div class="empty">Carregando…</div>';
+  var ref = Store.oneonone(id);
+  var primeiraVez = true;
+  registerCleanup(ref.onSnapshot(function(snap){
+    if(!snap.exists){ root.innerHTML = '<div class="empty"><div class="big">1:1 não encontrado</div><a href="#/1a1">Voltar</a></div>'; return; }
+    var o = Object.assign({}, snap.data()); o.id = id;
+    if(!primeiraVez && document.activeElement && root.contains(document.activeElement) && /TEXTAREA|INPUT|SELECT/.test(document.activeElement.tagName)) return; // não atrapalha quem está digitando
+    primeiraVez = false;
+    draw(o);
+  }, function(err){ console.error(err); root.innerHTML = '<div class="empty"><div class="big">Sem acesso a este 1:1</div></div>'; }));
+
+  function draw(o){
+    var gestor = ooCanManage(o), mine = currentUserEmail();
+    var souColab = (o.employeeEmail||"")===mine;
+    var editavel = gestor || (souColab && o.status!=="realizado");
+    var acoes = o.acoes || [];
+    root.innerHTML =
+      '<div class="dash-head"><div><h1>1:1 · '+esc(o.employeeName||"")+'</h1>'+
+        '<p>'+esc(o.cargo||"")+' · gestor '+esc(o.gestor||"—")+' · <b>'+esc(ooLabel(o))+'</b> · '+esc(fmtDateISOtoBR(o.data))+' · '+
+        (o.status==="realizado" ? '<span class="pill pdi-dentro">✔ realizado</span>' : '<span class="pill pdi-andamento">📅 agendado</span>')+'</p></div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print"><button class="btn" onclick="Router.go(\'#/1a1\')">← Todos os 1:1</button>'+
+        (isRHAdmin() ? '<button class="btn small" onclick="window.print()">🖶 Imprimir / PDF</button>' : '')+
+        (gestor && o.status!=="realizado" ? '<button class="btn primary" id="oo-concluir">✔ Concluir 1:1</button>' : '')+
+        (gestor && o.status==="realizado" ? '<button class="btn" id="oo-reabrir">Reabrir</button>' : '')+
+        (isRHAdmin() ? '<button class="btn small danger" id="oo-del">🗑️ Excluir</button>' : '')+'</div></div>'+
+      (souColab && o.status!=="realizado" && !gestor ? '<div class="banner">Você pode escrever a sua preparação antes da conversa. O gestor complementa durante o 1:1.</div>' : '')+
+      '<div class="card"><div class="card-body" style="display:flex;gap:18px;flex-wrap:wrap;">'+
+        '<div class="field" style="margin:0"><label>Data</label><input type="date" id="oo-f-data" value="'+esc(o.data||"")+'" '+(gestor?'':'disabled')+'></div>'+
+        '<div class="field" style="margin:0"><label>Próximo 1:1</label><input type="date" id="oo-f-prox" value="'+esc(o.proximo||"")+'" '+(gestor?'':'disabled')+'></div>'+
+      '</div></div>'+
+      '<div class="oo-grid">'+OO_TOPICOS.map(function(t){
+        return '<div class="oo-top"><div class="oo-th"><span class="oo-chk">✓</span><div><b>'+esc(t.t)+'</b><div class="hint">'+esc(t.d)+'</div></div></div>'+
+          '<textarea data-oo-top="'+t.k+'" rows="3" placeholder="'+(editavel?'Anotações…':'')+'" '+(editavel?'':'disabled')+'>'+esc((o.topicos||{})[t.k]||"")+'</textarea></div>';
+      }).join("")+'</div>'+
+      '<div class="card" style="margin-top:18px"><div class="card-head"><div><h2>Ações combinadas</h2><div class="sub">O que cada um se compromete a fazer até o próximo 1:1.</div></div>'+
+        (editavel ? '<button class="btn small no-print" id="oo-add">+ ação</button>' : '')+'</div><div class="card-body">'+
+        (acoes.length ? acoes.map(function(a,i){
+          return '<div class="oo-acao"><input type="checkbox" data-oo-feito="'+i+'" '+(a.feito?'checked':'')+' '+(editavel?'':'disabled')+'>'+
+            '<input type="text" data-oo-a="'+i+'" data-k="texto" value="'+esc(a.texto||"")+'" placeholder="Ação" '+(editavel?'':'disabled')+' style="flex:1;min-width:200px">'+
+            '<select data-oo-a="'+i+'" data-k="resp" '+(editavel?'':'disabled')+'><option value="colaborador" '+(a.resp!=="gestor"?'selected':'')+'>Colaborador</option><option value="gestor" '+(a.resp==="gestor"?'selected':'')+'>Gestor</option></select>'+
+            '<input type="date" data-oo-a="'+i+'" data-k="prazo" value="'+esc(a.prazo||"")+'" '+(editavel?'':'disabled')+'>'+
+            (editavel ? '<button class="icon-btn no-print" data-oo-rm="'+i+'" title="Remover">✕</button>' : '')+'</div>';
+        }).join("") : '<p class="hint" style="margin:0">Nenhuma ação registrada.</p>')+
+      '</div></div>'+
+      (o.status==="realizado" ? '<p class="hint" style="margin-top:12px">Concluído em '+esc(fmtDateISOtoBR(o.concludedAt||""))+(o.concludedBy?' por '+esc(o.concludedBy):'')+'.</p>' : '');
+
+    function upd(patch){ return ref.update(Object.assign({updatedAt:Date.now(), updatedBy:mine}, patch)).catch(function(err){ console.error(err); toast("Não foi possível salvar."); }); }
+    root.querySelectorAll("[data-oo-top]").forEach(function(t){ t.addEventListener("change", function(){ var p={}; p["topicos."+t.getAttribute("data-oo-top")] = t.value; upd(p); }); });
+    var fd = document.getElementById("oo-f-data"); if(fd) fd.addEventListener("change", function(){ var v=fd.value; if(!v) return; var p={data:v}; if(o.tipo==="adicional"){ p.ano=Number(v.slice(0,4)); p.quarter=ooQuarterOf(v); } upd(p); });
+    var fp = document.getElementById("oo-f-prox"); if(fp) fp.addEventListener("change", function(){ upd({proximo:fp.value}); });
+    function salvarAcoes(){ var l = acoes.map(function(a){ return Object.assign({}, a); });
+      root.querySelectorAll("[data-oo-a]").forEach(function(el){ var i=Number(el.getAttribute("data-oo-a")); l[i][el.getAttribute("data-k")] = el.value; });
+      root.querySelectorAll("[data-oo-feito]").forEach(function(el){ l[Number(el.getAttribute("data-oo-feito"))].feito = el.checked; });
+      return l; }
+    root.querySelectorAll("[data-oo-a],[data-oo-feito]").forEach(function(el){ el.addEventListener("change", function(){ upd({acoes:salvarAcoes()}); }); });
+    root.querySelectorAll("[data-oo-rm]").forEach(function(b){ b.addEventListener("click", function(){ var l=salvarAcoes(); l.splice(Number(b.getAttribute("data-oo-rm")),1); upd({acoes:l}).then(function(){ draw(Object.assign({}, o, {acoes:l})); }); }); });
+    var add = document.getElementById("oo-add"); if(add) add.addEventListener("click", function(){ var l=salvarAcoes(); l.push({texto:"",resp:"colaborador",prazo:"",feito:false}); upd({acoes:l}).then(function(){ draw(Object.assign({}, o, {acoes:l})); }); });
+    var con = document.getElementById("oo-concluir"); if(con) con.addEventListener("click", function(){ showOneOnOneConcludeModal(o, ref); });
+    var rea = document.getElementById("oo-reabrir"); if(rea) rea.addEventListener("click", function(){ upd({status:"agendado"}); });
+    var del = document.getElementById("oo-del"); if(del) del.addEventListener("click", function(){
+      if(!window.confirm("Excluir este 1:1 de "+(o.employeeName||"")+"? As anotações serão apagadas e não poderão ser recuperadas.")) return;
+      ref.delete().then(function(){ Router.go("#/1a1"); toast("1:1 excluído."); }).catch(function(){ toast("Não foi possível excluir."); });
+    });
+  }
+}
+
+function showOneOnOneConcludeModal(o, ref){
+  var host = document.getElementById("modal-host");
+  host.innerHTML =
+    '<div class="modal-overlay" id="modal-overlay"><div class="modal-card" style="max-width:460px;">'+
+      '<div class="modal-head"><h3>Concluir 1:1</h3><button class="icon-btn" id="modal-close" aria-label="Fechar">✕</button></div>'+
+      '<p class="hint">O 1:1 de <b>'+esc(o.employeeName||"")+'</b> em '+esc(fmtDateISOtoBR(o.data))+' fica registrado como realizado.</p>'+
+      '<label style="display:flex;gap:8px;align-items:flex-start;margin:10px 0"><input type="checkbox" id="oo-pdi" checked> <span>Atualizar o campo <b>"Último 1:1"</b> das ações em aberto do PDI de '+esc((o.employeeName||"").split(" ")[0])+' com esta data.</span></label>'+
+      '<div style="display:flex;gap:10px;margin-top:6px;"><button class="btn" id="oo-c-cancel">Cancelar</button><button class="btn primary" id="oo-c-ok">✔ Concluir</button></div>'+
+    '</div></div>';
+  document.getElementById("modal-close").addEventListener("click", closeNotifyModal);
+  document.getElementById("oo-c-cancel").addEventListener("click", closeNotifyModal);
+  document.getElementById("oo-c-ok").addEventListener("click", function(){
+    var atualizaPdi = document.getElementById("oo-pdi").checked;
+    this.disabled = true;
+    ref.update({status:"realizado", concludedAt:todayISO(), concludedBy:currentUserEmail(), updatedAt:Date.now()}).then(function(){
+      if(!atualizaPdi) return null;
+      var pref = Store.pdi(pdiId(o.employeeEmail));
+      return pref.get().then(function(s){
+        if(!s.exists) return null;
+        var items = (s.data().items||[]).map(function(x){ return Object.assign({}, x); }), n = 0;
+        items.forEach(function(it){ var k = pdiItemStatus(it).key; if(k==="nao_iniciado"||k==="andamento"||k==="atrasado"){ if(!it.ultimo1x1 || it.ultimo1x1 < o.data){ it.ultimo1x1 = o.data; n++; } } });
+        return n ? pref.update({items:items, updatedAt:Date.now()}) : null;
+      });
+    }).then(function(){ closeNotifyModal(); toast("1:1 concluído."); })
+      .catch(function(err){ console.error(err); closeNotifyModal(); toast("1:1 concluído, mas não foi possível atualizar o PDI."); });
+  });
+}
+
 function render(){
   clearCleanup();
   var route = Router.parse();
@@ -2555,6 +2834,8 @@ function render(){
   else if(route.page==="pdi-detail") viewPdiDetail(route.email);
   else if(route.page==="tnd") viewTnd();
   else if(route.page==="tnd-base") viewTndBase();
+  else if(route.page==="1a1") viewOneOnOneList();
+  else if(route.page==="1a1-detail") viewOneOnOneDetail(route.id);
 }
 
 function updateUserBadge(user){
