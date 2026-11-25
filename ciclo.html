@@ -448,9 +448,9 @@ const STAGES=[
   {k:'diagnostico',n:3,t:'Diagnóstico',s:'Forms • 6 técnicas • 6 comportamentais',status:'ok'},
   {k:'swot',n:4,t:'Análise SWOT',s:'Forças • Fraquezas • Sugestão de trilha',status:'ok'},
   {k:'trilha',n:5,t:'Trilha de Desenvolvimento',s:'Base de Treinamentos • Painel T&D • Trilhas',status:'ok'},
-  {k:'pdi',n:6,t:'PDI',s:'Formalização das ações acordadas'},
+  {k:'pdi',n:6,t:'PDI',s:'Formalização das ações acordadas',status:'ok'},
   {k:'one-on-one',n:7,t:'One-on-One',s:'Acompanhamento trimestral • Suporte'},
-  {k:'desempenho',n:8,t:'Avaliação de Desempenho',s:'Anual • Metas • Pontos de melhoria'},
+  {k:'desempenho',n:8,t:'Avaliação de Desempenho',s:'Anual • Metas • Pontos de melhoria',status:'ok'},
   {k:'indicadores',n:9,t:'Indicadores Individuais',s:'Evolução do PDI • Aplicação • Metas'}
 ];
 let VIEW={dc:null, nivel:null, q:'', area:'', occ:''};
@@ -481,6 +481,8 @@ function route(){
   else if(key==='diagnostico') renderDiagnostico();
   else if(key==='swot') renderSwot();
   else if(key==='trilha') renderTrilha();
+  else if(key==='pdi') renderEmbed('pdi');
+  else if(key==='desempenho') renderEmbed('desempenho');
   else renderStage(STAGES.find(s=>s.k===key));
   if(prevHash!==h) window.scrollTo(0,0);
 }
@@ -1275,6 +1277,18 @@ function swBuscaUrl(plat,q){ return /alura/i.test(plat)?'https://www.alura.com.b
 function swFases(h){ const t=Math.round(h/3); return [`Dias 1 a ${t}`,`Dias ${t+1} a ${2*t}`,`Dias ${2*t+1} a ${h}`]; }
 function swPlanoAuto(sw,i){ const cs=sw.cursos.filter(c=>(c.prioridade||1)===i+1); return {foco:cs.length?`${i===2?'Avançar em':i===1?'Concluir ou avançar em':'Iniciar'} ${cs.map(c=>c.titulo.split(/[:(—–]/)[0].trim()).join(' e ')}.`:'', evidencia:cs.map(c=>c.aplicacao).filter(Boolean).map(x=>x.split('.')[0]).join('; ')}; }
 
+const EMBEDS={
+  pdi:{n:6,t:'PDI — Plano de Desenvolvimento Individual',crumb:'Etapa 6 de 9 · Formalização das ações acordadas',src:'./?embed=1#/pdi',
+    p:'Os PDIs de todos os colaboradores — os mesmos que os gestores acompanham na ferramenta de Avaliação. Aqui o RH vê todos; cada gestor vê só a sua equipe.'},
+  desempenho:{n:8,t:'Avaliação de Desempenho',crumb:'Etapa 8 de 9 · Anual • Metas • Pontos de melhoria',src:'./?embed=1#/',
+    p:'As avaliações de desempenho do ciclo — as mesmas que gestores e colaboradores respondem. Os pontos de melhoria alimentam o PDI (Etapa 6).'}
+};
+function renderEmbed(k){
+  const e=EMBEDS[k];
+  $('#main').innerHTML=`<div class="crumb">${esc(e.crumb)}</div>
+  <div class="pagehead"><div><h1>${esc(e.t)}</h1><p>${esc(e.p)}</p></div><a class="btn ghost sm" href="${e.src.replace('?embed=1','')}" target="_blank" rel="noopener" style="text-decoration:none">Abrir em nova aba ↗</a></div>
+  <iframe src="${e.src}" title="${esc(e.t)}" style="width:100%;height:calc(100vh - 210px);min-height:560px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>`;
+}
 /* ============ Etapa 5 — Trilha: Base de Treinamentos + Painel T&D (da ferramenta de Avaliação/PDI) ============ */
 function renderTrilha(){
   const tab=VIEW.trTab||'base';
@@ -1283,7 +1297,7 @@ function renderTrilha(){
   const src={base:'./?embed=1#/tnd/base',painel:'./?embed=1#/tnd'}[tab];
   $('#main').innerHTML=`
   <div class="crumb">Etapa 5 de 9 · Treinamentos, prática e evidências</div>
-  <div class="pagehead"><div><h1>Trilha de Desenvolvimento</h1><p>Aqui ficam a <b>Base de Treinamentos</b> (cursos, custos, horas e datas de compra) e o <b>Painel T&amp;D</b> — os mesmos da ferramenta de Avaliação/PDI, num só lugar. As trilhas sugeridas na Análise SWOT aparecem na terceira aba; depois de validadas, os cursos viram ações no PDI do colaborador.</p></div></div>
+  <div class="pagehead"><div><h1>Trilha de Desenvolvimento</h1><p>Aqui ficam a <b>Base de Treinamentos</b> (cursos, custos, horas e datas de compra) e o <b>Painel T&amp;D</b> — os mesmos da ferramenta de Avaliação/PDI. As trilhas sugeridas na Análise SWOT aparecem na terceira aba; depois de validadas, os cursos viram ações no PDI (Etapa 6).</p></div></div>
   <div class="tabs" style="margin-bottom:12px">${tabs.map(([k,t])=>`<button data-trt="${k}" class="${tab===k?'on':''}">${t}</button>`).join('')}${src?`<a class="btn ghost sm" href="${src.replace('?embed=1','')}" target="_blank" rel="noopener" style="text-decoration:none;margin-left:auto">Abrir em nova aba ↗</a>`:''}</div>
   ${src?`<iframe id="trFrame" src="${src}" title="${tab==='base'?'Base de Treinamentos':'Painel T&D'}" style="width:100%;height:calc(100vh - 230px);min-height:560px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>`
    :`<div class="card" style="padding:4px 8px;overflow:auto"><table class="t"><thead><tr><th>Colaborador</th><th>Cargo</th><th>Situação da trilha</th><th>Cursos</th><th>Prazos acordados</th><th></th></tr></thead><tbody>${ps.sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>{ const sw=swOf(p.id), cs=sw.cursos||[], pz=cs.filter(c=>c.prazo).map(c=>c.prazo).sort();
