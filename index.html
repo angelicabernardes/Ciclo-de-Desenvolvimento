@@ -320,6 +320,7 @@ table.dash tr:hover td{ background:var(--surface-2); }
     </div>
     <nav id="breadcrumb"></nav>
     <span class="no-print" id="ms-user-badge" style="font-size:12.5px;color:var(--text-muted);margin-right:4px;"></span>
+    <a class="btn small no-print" id="ciclo-btn" href="ciclo.html" style="display:none;text-decoration:none" title="Ciclo de Competências (só RH)">📘 Ciclo</a>
     <button class="btn small no-print" id="rh-gate-btn" style="display:none" onclick="showRHGateModal()" title="Acesso RH (Gente &amp; Cultura)">🔓 Acesso RH</button>
   </header>
   <main><div class="wrap" id="view"></div></main>
@@ -467,6 +468,7 @@ function updateRHButton(){
   if(!btn) return;
   if(isRHAdmin()){ btn.style.display = ""; btn.innerHTML = "🔓 Acesso RH"; btn.classList.add("primary"); }
   else { btn.style.display = "none"; }
+  var cb = document.getElementById("ciclo-btn"); if(cb) cb.style.display = isRHAdmin() ? "" : "none";
   updateBrandHome();
 }
 /* O logo/nome no topo só volta pro painel geral quando a pessoa não chegou por
